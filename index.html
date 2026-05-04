@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Engineering Standup Reference Trivia</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="game-root" class="game-root">
+      <div class="crt-scanlines" aria-hidden="true"></div>
+      <div class="crt-vignette" aria-hidden="true"></div>
+
+      <div class="marquee-strip" aria-hidden="true">
+        <div class="marquee-inner">
+          <span
+            >ENGINEERING STANDUP REFERENCE TRIVIA · CO-OP RAID · ROADMAP ·
+            RELEASE · QUALITY · REMATCH ANYTIME ·
+          </span>
+          <span
+            >ENGINEERING STANDUP REFERENCE TRIVIA · CO-OP RAID · ROADMAP ·
+            RELEASE · QUALITY · REMATCH ANYTIME ·
+          </span>
+        </div>
+      </div>
+
+      <header id="game-hud" class="game-hud hidden" aria-label="Game status">
+        <div class="hud-title">
+          <span class="hud-title-main">STANDUP</span><span class="hud-title-sub">RUN</span>
+        </div>
+        <div class="hud-stats">
+          <div class="hud-chip" title="Experience points this run">
+            <span class="hud-chip-label">XP</span>
+            <span id="hud-xp" class="hud-chip-value">0</span>
+          </div>
+          <div id="hud-combo-wrap" class="hud-chip hud-combo">
+            <span class="hud-chip-label">Combo</span>
+            <span id="hud-combo" class="hud-chip-value">×0</span>
+            <div id="combo-bars" class="combo-bars" aria-hidden="true"></div>
+          </div>
+          <div class="hud-chip">
+            <span class="hud-chip-label">Stage</span>
+            <span id="hud-stage" class="hud-chip-value">1</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          id="sound-toggle"
+          class="hud-sound"
+          aria-pressed="true"
+          title="Toggle sound"
+        >
+          <span class="sound-on" aria-hidden="true">&#128266;</span>
+          <span class="sound-off" aria-hidden="true">&#128263;</span>
+        </button>
+      </header>
+
+      <div id="game-banner" class="game-banner hidden" role="status"></div>
+
+      <div id="countdown-overlay" class="countdown-overlay hidden">
+        <p id="countdown-text" class="countdown-text">3</p>
+        <p class="countdown-sub">Get ready</p>
+      </div>
+
+      <div id="fx-layer" class="fx-layer" aria-hidden="true"></div>
+
+      <div id="game-stage" class="game-stage">
+        <main class="app">
+          <header class="hero" id="hero-block">
+            <p class="eyebrow">Co-op arcade mode</p>
+            <h1 class="game-logo">Engineering Standup <span class="game-logo-sub">Reference Trivia</span></h1>
+            <p class="subtitle">
+              A fast squad raid on the stand-up reference — roadmap, collaboration,
+              quality, and release readiness. Score XP, build combo, clear the waves.
+            </p>
+          </header>
+
+          <section id="intro" class="card intro-card title-screen">
+            <div class="intro-grid">
+              <div>
+                <p class="insert-coin">Press start to deploy</p>
+                <h2 class="intro-title">Mission briefing</h2>
+                <p class="intro-lede">
+                  Each run draws <strong>20 random stages</strong> from a larger
+                  pool: multiple choice, true/false, select-all, typed fill-ins and
+                  scrambles (with hints), and <strong>30 seconds</strong> per stage.
+                  Rematch pulls a new mix.
+                </p>
+                <ul class="intro-tips">
+                  <li>
+                    <kbd>1</kbd>–<kbd>4</kbd> / <kbd>Y</kbd><kbd>N</kbd> ·
+                    <kbd>Enter</kbd> to confirm
+                  </li>
+                  <li>Project fullscreen — loudest correct answer wins</li>
+                </ul>
+              </div>
+              <div class="intro-stats">
+                <div class="stat-pill">
+                  <span class="stat-value" id="intro-q-count">20</span>
+                  <span class="stat-label">stages / run</span>
+                </div>
+                <div class="stat-pill">
+                  <span class="stat-value" id="intro-format-count">4</span>
+                  <span class="stat-label">patterns</span>
+                </div>
+              </div>
+            </div>
+            <button id="start-btn" type="button" class="btn-arcade btn-large">
+              Insert coin / Start run
+            </button>
+          </section>
+
+          <section id="quiz-container" class="card quiz-card playfield hidden">
+            <div class="quiz-top">
+              <div id="meta" class="meta"></div>
+              <div id="timer-wrap" class="timer-wrap" hidden>
+                <div class="timer-bar">
+                  <div id="timer-fill" class="timer-fill"></div>
+                </div>
+                <span id="timer-label" class="timer-label">30</span>
+              </div>
+              <div class="streak" id="streak-wrap" hidden>
+                <span class="streak-icon" aria-hidden="true">&#128293;</span>
+                <span id="streak-text"></span>
+              </div>
+            </div>
+            <div id="timer-flash" class="timer-flash" aria-hidden="true"></div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progress-fill" class="progress-fill"></div>
+            </div>
+            <div class="question-row">
+              <div class="badges-row">
+                <span id="format-badge" class="format-badge"></span>
+                <span id="category" class="category"></span>
+              </div>
+              <h2 id="question" class="question"></h2>
+            </div>
+            <div id="options" class="options" role="list"></div>
+            <div class="actions">
+              <p id="keyboard-hint" class="keyboard-hint"></p>
+              <button id="next-btn" type="button" class="btn-arcade btn-next" disabled>
+                Next
+              </button>
+            </div>
+          </section>
+
+          <section id="result" class="card result-card game-over hidden">
+            <p class="eyebrow">Run complete</p>
+            <h2 id="rank-title" class="rank-title"></h2>
+            <p id="score-text" class="score-big"></p>
+            <p id="xp-final" class="xp-final"></p>
+            <p id="summary-text" class="summary-text"></p>
+            <div id="missed-block" class="missed-block hidden">
+              <h3 class="missed-heading">Recon log — misses</h3>
+              <ul id="missed-list" class="missed-list"></ul>
+            </div>
+            <button id="restart-btn" type="button" class="btn-arcade">
+              Rematch — shuffle &amp; go
+            </button>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
