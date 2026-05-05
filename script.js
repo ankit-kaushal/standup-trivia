@@ -1,4 +1,4 @@
-/** @typedef {"pick_one" | "true_false" | "pick_many" | "fill_blank" | "word_scramble"} ChallengeType */
+/** @typedef {"pick_one" | "true_false" | "pick_many" | "fill_blank" | "word_scramble" | "qna"} ChallengeType */
 
 const FORMAT_LABELS = {
   pick_one: "Multiple choice",
@@ -6,11 +6,12 @@ const FORMAT_LABELS = {
   pick_many: "Select all that apply",
   fill_blank: "Fill in the blank",
   word_scramble: "Word scramble",
+  qna: "QnA",
 };
 
-const ROUND_SIZE = 20;
+const ROUND_SIZE = 10;
 
-const QUESTION_BANK = [
+/* const LEGACY_QUESTION_BANK = [
   {
     type: "pick_one",
     category: "Roadmap",
@@ -273,6 +274,99 @@ const QUESTION_BANK = [
     scrambled: "AWDNHIDTB",
     correctAnswer: "Bandwidth",
   },
+]; */
+
+const QUESTION_BANK = [
+  {
+    type: "pick_one",
+    category: "Engineering",
+    question: "Development benefits with emphasis on ____________",
+    options: [
+      "Speed over everything",
+      "Quality over everything",
+      "Balance of reuse, scale and maintainability",
+    ],
+    answer: 2,
+  },
+  {
+    type: "pick_one",
+    category: "Release",
+    question: "Release readiness is shared responsibility across ________",
+    options: [
+      "Architecture, Engineering & QA",
+      "Engineering & QA",
+      "Architecture & Engineering",
+    ],
+    answer: 0,
+  },
+  {
+    type: "pick_one",
+    category: "Collaboration",
+    question: "Why is communicating bandwidth constraints early critical?",
+    options: [
+      "To reduce meetings",
+      "To avoid unrealistic commitments and missed deadlines",
+      "To speed up testing",
+    ],
+    answer: 1,
+  },
+  {
+    type: "pick_one",
+    category: "Quality",
+    question: "Which is the BEST example of balancing tech debt vs delivery speed?",
+    options: [
+      "Ignoring tech debt completely",
+      "Making trade-offs aligned with timelines",
+      "Always prioritizing delivery",
+    ],
+    answer: 1,
+  },
+  {
+    type: "pick_one",
+    category: "Execution",
+    question: "Which practice directly supports visibility of work?",
+    options: [
+      "Keeping ClickUp updated with status",
+      "Weekly releases only",
+      "Silent execution",
+    ],
+    answer: 0,
+  },
+  {
+    type: "true_false",
+    category: "Collaboration",
+    question: "Feedback should always include reasoning and context.",
+    answer: true,
+  },
+  {
+    type: "true_false",
+    category: "Risk",
+    question:
+      "Early communication of risks can sometimes slow down delivery but improves outcomes.",
+    answer: true,
+  },
+  {
+    type: "true_false",
+    category: "Collaboration",
+    question:
+      "Declining a meeting without context is acceptable if you are busy with delivery.",
+    answer: false,
+  },
+  {
+    type: "qna",
+    category: "QnA",
+    question:
+      "During a code review, you notice a pattern that could cause maintainability issues down the line, but fixing it now would delay the release by two days.",
+    correctAnswer:
+      "Raise code quality concerns during development with trade-offs aligned to delivery timelines.",
+  },
+  {
+    type: "qna",
+    category: "QnA",
+    question:
+      "New information suggests a shift in priorities mid-sprint. What is the expected response?",
+    correctAnswer: "Adjust priorities based on updated information.",
+  },
 ];
 
 const CATEGORY_CLASS = {
@@ -284,6 +378,9 @@ const CATEGORY_CLASS = {
   Quality: "cat-quality",
   Architecture: "cat-arch",
   Bonus: "cat-bonus",
+  Engineering: "cat-roadmap",
+  Risk: "cat-exec",
+  QnA: "cat-bonus",
 };
 
 function shuffleInPlace(array) {
@@ -306,6 +403,10 @@ function normalizeQuestion(raw) {
     delete q.answer;
     if (q.acceptedAnswers) q.acceptedAnswers = [...q.acceptedAnswers];
   }
+  if (q.type === "qna") {
+    delete q.options;
+    delete q.answer;
+  }
   if (q.type === "pick_one" && q.options) {
     q.options = [...q.options];
   }
@@ -324,6 +425,7 @@ function cloneForRound(raw) {
     if (n.acceptedAnswers) o.acceptedAnswers = [...n.acceptedAnswers];
     return o;
   }
+  if (n.type === "qna") return { ...n };
   if (n.type === "pick_many")
     return { ...n, options: [...n.options], correctIndices: [...n.correctIndices] };
   return { ...n };
@@ -331,7 +433,6 @@ function cloneForRound(raw) {
 
 function buildRound() {
   const copy = QUESTION_BANK.map(cloneForRound);
-  shuffleInPlace(copy);
   return copy.slice(0, Math.min(ROUND_SIZE, copy.length));
 }
 
@@ -355,9 +456,13 @@ const missed = [];
 const WAVE_SIZE = 4;
 const COMBO_BAR_CAP = 8;
 const QUESTION_TIME_SEC = 30;
+const QNA_TIME_SEC = 60;
+const QNA_REVEAL_SEC = 15;
 
 /** @type {ReturnType<typeof setInterval> | null} */
 let questionTimerId = null;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let qnaRevealTimerId = null;
 let hintLevel = 0;
 
 let totalXp = 0;
@@ -585,6 +690,13 @@ function stopQuestionTimer() {
   }
 }
 
+function clearQnaRevealTimer() {
+  if (qnaRevealTimerId !== null) {
+    clearTimeout(qnaRevealTimerId);
+    qnaRevealTimerId = null;
+  }
+}
+
 function normalizeTypedAnswer(s) {
   return String(s ?? "")
     .trim()
@@ -630,14 +742,26 @@ function flashTimerNumber(n) {
   window.setTimeout(() => timerFlash.classList.remove("show"), 520);
 }
 
-function startQuestionTimer() {
+function revealTimeoutAnswer(correctSummary) {
+  const old = document.getElementById("timeout-reveal");
+  if (old) old.remove();
+  const box = document.createElement("div");
+  box.id = "timeout-reveal";
+  box.className = "timeout-reveal";
+  box.innerHTML = `<span class="timeout-label">Time up.</span> Correct answer: <strong>${escapeHtml(
+    String(correctSummary),
+  )}</strong>`;
+  optionsEl.appendChild(box);
+}
+
+function startQuestionTimer(totalSeconds = QUESTION_TIME_SEC) {
   stopQuestionTimer();
   if (!timerWrap || !timerFill || !timerLabel) return;
 
-  let remaining = QUESTION_TIME_SEC;
+  let remaining = totalSeconds;
   const paint = () => {
     timerLabel.textContent = String(remaining);
-    timerFill.style.width = `${(remaining / QUESTION_TIME_SEC) * 100}%`;
+    timerFill.style.width = `${(remaining / totalSeconds) * 100}%`;
     if (remaining <= 5 && remaining > 0) {
       timerWrap.classList.add("timer-urgent");
       playBlip("tick");
@@ -683,7 +807,11 @@ function forceQuestionTimeout() {
     return;
   }
   if (current.type === "pick_many") {
+    const correctLabels = current.correctIndices
+      .map((i) => current.options[i])
+      .join("; ");
     revealPickMany(current);
+    revealTimeoutAnswer(`All of: ${correctLabels}`);
     return;
   }
   if (current.type === "true_false") {
@@ -693,7 +821,9 @@ function forceQuestionTimeout() {
       const v = btn.dataset.value === "true";
       if (v === current.answer) btn.classList.add("correct");
     });
-    applyScore(false, current, current.answer ? "True" : "False");
+    const correct = current.answer ? "True" : "False";
+    applyScore(false, current, correct);
+    revealTimeoutAnswer(correct);
     return;
   }
   if (current.type === "pick_one") {
@@ -704,6 +834,16 @@ function forceQuestionTimeout() {
       if (idx === shuffledCorrectIndex) btn.classList.add("correct");
     });
     applyScore(false, current, correctLabel);
+    revealTimeoutAnswer(correctLabel);
+  }
+  if (current.type === "qna") {
+    const yesBtn = document.getElementById("qna-yes-btn");
+    const noBtn = document.getElementById("qna-no-btn");
+    if (yesBtn) yesBtn.disabled = true;
+    if (noBtn) noBtn.disabled = true;
+    const answerText = current.correctAnswer ?? "Audience response not recorded";
+    applyScore(false, current, answerText);
+    revealTimeoutAnswer(answerText);
   }
 }
 
@@ -733,6 +873,7 @@ function revealTypedAnswer(current, rawInput, fromTimer = false) {
     }
     if (hb) hb.disabled = true;
     applyScore(false, current, current.correctAnswer);
+    revealTimeoutAnswer(current.correctAnswer);
     return;
   }
 
@@ -1002,9 +1143,57 @@ function renderPickMany(current) {
   setKeyboardHint("Keyboard: Enter locks your selection");
 }
 
+function renderQna(current) {
+  optionsEl.className = "options options-qna";
+  optionsEl.innerHTML = `
+    <div class="qna-wait" id="qna-wait">
+      Audience discussion window is open.
+    </div>
+    <div class="qna-panel" id="qna-panel" hidden>
+      <p class="qna-prompt">Did audience give the correct answer?</p>
+      <div class="qna-actions">
+        <button type="button" id="qna-yes-btn" class="btn-arcade btn-next">Yes</button>
+        <button type="button" id="qna-no-btn" class="btn-hint">No</button>
+      </div>
+    </div>`;
+
+  const wait = document.getElementById("qna-wait");
+  const panel = document.getElementById("qna-panel");
+  const yesBtn = document.getElementById("qna-yes-btn");
+  const noBtn = document.getElementById("qna-no-btn");
+
+  clearQnaRevealTimer();
+  qnaRevealTimerId = window.setTimeout(() => {
+    if (answered) return;
+    if (wait) wait.hidden = true;
+    if (panel) panel.hidden = false;
+    flashBanner("Host Decision", "wave");
+  }, QNA_REVEAL_SEC * 1000);
+
+  yesBtn?.addEventListener("click", () => {
+    if (answered) return;
+    yesBtn.disabled = true;
+    if (noBtn) noBtn.disabled = true;
+    applyScore(true, current, "Audience answered correctly");
+  });
+
+  noBtn?.addEventListener("click", () => {
+    if (answered) return;
+    if (yesBtn) yesBtn.disabled = true;
+    noBtn.disabled = true;
+    applyScore(false, current, "Audience answer was incorrect");
+    revealTimeoutAnswer(current.correctAnswer ?? "Audience answer was incorrect");
+  });
+
+  nextBtn.disabled = true;
+  nextBtn.textContent = "Next stage";
+  setKeyboardHint("QnA mode · Yes/No appears after 15s");
+}
+
 function renderQuestion() {
   answered = false;
   stopQuestionTimer();
+  clearQnaRevealTimer();
   if (timerWrap) {
     timerWrap.hidden = false;
     timerWrap.classList.remove("timer-urgent");
@@ -1042,6 +1231,7 @@ function renderQuestion() {
   else if (type === "word_scramble") renderWordScramble(current);
   else if (type === "true_false") renderTrueFalse(current);
   else if (type === "pick_many") renderPickMany(current);
+  else if (type === "qna") renderQna(current);
 
   updateHud();
   updateComboBars();
@@ -1051,7 +1241,7 @@ function renderQuestion() {
     window.setTimeout(() => flashBanner(`Wave ${wave}`, "wave"), 280);
   }
 
-  startQuestionTimer();
+  startQuestionTimer(type === "qna" ? QNA_TIME_SEC : QUESTION_TIME_SEC);
 }
 
 function escapeHtml(text) {
@@ -1097,6 +1287,7 @@ function rankForPercent(percent) {
 }
 
 function showResult() {
+  clearQnaRevealTimer();
   stopQuestionTimer();
   if (timerWrap) timerWrap.hidden = true;
   quizContainer.classList.add("hidden");
@@ -1175,6 +1366,7 @@ nextBtn.addEventListener("click", () => {
 
 restartBtn.addEventListener("click", () => {
   resumeAudio();
+  clearQnaRevealTimer();
   stopQuestionTimer();
   questions = buildRound();
   index = 0;
@@ -1240,6 +1432,14 @@ document.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !nextBtn.disabled) {
         e.preventDefault();
         nextBtn.click();
+      }
+    } else if (current.type === "qna") {
+      if (e.key.toLowerCase() === "y") {
+        const yesBtn = document.getElementById("qna-yes-btn");
+        if (yesBtn && !yesBtn.disabled && !yesBtn.hidden) yesBtn.click();
+      } else if (e.key.toLowerCase() === "n") {
+        const noBtn = document.getElementById("qna-no-btn");
+        if (noBtn && !noBtn.disabled && !noBtn.hidden) noBtn.click();
       }
     }
     return;

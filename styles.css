@@ -877,8 +877,54 @@ h1 {
   gap: 10px;
 }
 
+.timeout-reveal {
+  margin-top: 6px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--danger) 45%, var(--border));
+  background: rgba(239, 68, 68, 0.1);
+  color: #fecaca;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.timeout-label {
+  font-weight: 700;
+  margin-right: 6px;
+}
+
 .options-typed {
   gap: 14px;
+}
+
+.options-qna {
+  gap: 12px;
+}
+
+.qna-wait {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in oklab, var(--neon) 50%, var(--border));
+  background: rgba(0, 229, 255, 0.08);
+  color: #bfdbfe;
+  line-height: 1.45;
+}
+
+.qna-panel {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.qna-prompt {
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+.qna-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .typed-row {
