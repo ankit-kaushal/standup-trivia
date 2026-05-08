@@ -276,7 +276,7 @@ const ROUND_SIZE = 10;
   },
 ]; */
 
-const QUESTION_BANK = [
+let QUESTION_BANK = [
   {
     type: "pick_one",
     category: "Engineering",
@@ -436,9 +436,9 @@ function buildRound() {
   return copy.slice(0, Math.min(ROUND_SIZE, copy.length));
 }
 
-const FORMAT_COUNT = new Set(
-  QUESTION_BANK.map((q) => normalizeQuestion(q).type),
-).size;
+function getFormatCount() {
+  return new Set(QUESTION_BANK.map((q) => normalizeQuestion(q).type)).size;
+}
 
 let questions = buildRound();
 let index = 0;
@@ -455,8 +455,8 @@ const missed = [];
 
 const WAVE_SIZE = 4;
 const COMBO_BAR_CAP = 8;
-const QUESTION_TIME_SEC = 30;
-const QNA_TIME_SEC = 60;
+let QUESTION_TIME_SEC = 30;
+let QNA_TIME_SEC = 60;
 const QNA_REVEAL_SEC = 15;
 
 /** @type {ReturnType<typeof setInterval> | null} */
@@ -471,6 +471,11 @@ let bannerTimer = 0;
 let floatTimer = 0;
 /** @type {AudioContext | null} */
 let audioCtx = null;
+const API_BASE = "";
+let activePlayerId = "";
+let activeSessionId = "";
+let activePlayerName = "";
+let questionStartedAtMs = 0;
 
 const gameRoot = document.getElementById("game-root");
 const gameHud = document.getElementById("game-hud");
@@ -489,6 +494,7 @@ const xpFinal = document.getElementById("xp-final");
 
 const intro = document.getElementById("intro");
 const startBtn = document.getElementById("start-btn");
+const playerNameInput = document.getElementById("player-name");
 const introQCount = document.getElementById("intro-q-count");
 const introFormatCount = document.getElementById("intro-format-count");
 
@@ -516,8 +522,8 @@ const restartBtn = document.getElementById("restart-btn");
 const missedBlock = document.getElementById("missed-block");
 const missedList = document.getElementById("missed-list");
 
-introQCount.textContent = String(ROUND_SIZE);
-introFormatCount.textContent = String(FORMAT_COUNT);
+introQCount.textContent = String(Math.min(ROUND_SIZE, QUESTION_BANK.length));
+introFormatCount.textContent = String(getFormatCount());
 
 soundToggle.setAttribute("aria-pressed", soundEnabled ? "true" : "false");
 soundToggle.addEventListener("click", () => {
@@ -525,6 +531,116 @@ soundToggle.addEventListener("click", () => {
   localStorage.setItem("standupRunSound", soundEnabled ? "1" : "0");
   soundToggle.setAttribute("aria-pressed", soundEnabled ? "true" : "false");
 });
+
+async function apiJson(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const err = await res.json();
+      if (err?.message) msg = err.message;
+    } catch (_e) {
+      // Ignore invalid json.
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+async function loadTimerConfig() {
+  const data = await apiJson("/api/game/config");
+  if (Number.isFinite(data.questionTimeSec)) QUESTION_TIME_SEC = data.questionTimeSec;
+  if (Number.isFinite(data.qnaTimeSec)) QNA_TIME_SEC = data.qnaTimeSec;
+}
+
+function mapServerQuestion(row) {
+  const q = {
+    type: row.type,
+    category: row.category || "General",
+    question: row.question,
+    score: Number.isFinite(row.score) ? row.score : 1,
+    timeSec: Number.isFinite(row.timeSec) ? row.timeSec : null,
+  };
+
+  if (row.type === "pick_one") {
+    q.options = Array.isArray(row.options) ? row.options : [];
+    q.answer = Number.isFinite(row.answer) ? row.answer : 0;
+  } else if (row.type === "true_false") {
+    q.answer = String(row.correctAnswer).toLowerCase() === "true";
+  } else if (row.type === "pick_many") {
+    q.options = Array.isArray(row.options) ? row.options : [];
+    q.correctIndices = Array.isArray(row.correctIndices) ? row.correctIndices : [];
+  } else if (row.type === "fill_blank") {
+    q.correctAnswer = row.correctAnswer || "";
+  } else if (row.type === "word_scramble") {
+    q.correctAnswer = row.correctAnswer || "";
+    q.scrambled = row.scrambled || "";
+    q.prompt = row.prompt || row.question;
+  } else if (row.type === "qna") {
+    q.correctAnswer = row.correctAnswer || "";
+  }
+
+  return q;
+}
+
+async function loadQuestionsFromServer() {
+  const data = await apiJson("/api/game/questions");
+  const incoming = Array.isArray(data.questions) ? data.questions : [];
+  if (!incoming.length) return;
+  QUESTION_BANK = incoming.map(mapServerQuestion);
+  questions = buildRound();
+  introQCount.textContent = String(Math.min(ROUND_SIZE, QUESTION_BANK.length));
+  introFormatCount.textContent = String(getFormatCount());
+}
+
+async function startRunOnServer(name) {
+  const data = await apiJson("/api/game/start", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  activePlayerId = data.playerId || "";
+  activeSessionId = data.sessionId || "";
+  if (Number.isFinite(data.questionTimeSec)) QUESTION_TIME_SEC = data.questionTimeSec;
+  if (Number.isFinite(data.qnaTimeSec)) QNA_TIME_SEC = data.qnaTimeSec;
+}
+
+async function saveResponseToServer(current, isCorrect, correctSummary, selectedSummary) {
+  if (!activeSessionId || !activePlayerId) return;
+  const questionText = current.question ?? current.prompt ?? "(challenge)";
+  await apiJson("/api/game/response", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId: activeSessionId,
+      playerId: activePlayerId,
+      questionIndex: index,
+      question: questionText,
+      category: current.category ?? "",
+      type: current.type ?? "",
+      selectedAnswer: String(selectedSummary ?? ""),
+      correctAnswer: String(correctSummary ?? ""),
+      isCorrect,
+      durationMs: questionStartedAtMs ? Date.now() - questionStartedAtMs : null,
+    }),
+  });
+}
+
+async function finishRunOnServer(percent) {
+  if (!activeSessionId) return;
+  await apiJson("/api/game/finish", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId: activeSessionId,
+      score,
+      totalQuestions: questions.length,
+      percent,
+      bestStreak,
+      totalXp,
+    }),
+  });
+}
 
 function ensureAudio() {
   if (!audioCtx) {
@@ -822,7 +938,7 @@ function forceQuestionTimeout() {
       if (v === current.answer) btn.classList.add("correct");
     });
     const correct = current.answer ? "True" : "False";
-    applyScore(false, current, correct);
+    applyScore(false, current, correct, "Timed out");
     revealTimeoutAnswer(correct);
     return;
   }
@@ -833,7 +949,7 @@ function forceQuestionTimeout() {
       btn.disabled = true;
       if (idx === shuffledCorrectIndex) btn.classList.add("correct");
     });
-    applyScore(false, current, correctLabel);
+    applyScore(false, current, correctLabel, "Timed out");
     revealTimeoutAnswer(correctLabel);
   }
   if (current.type === "qna") {
@@ -842,7 +958,7 @@ function forceQuestionTimeout() {
     if (yesBtn) yesBtn.disabled = true;
     if (noBtn) noBtn.disabled = true;
     const answerText = current.correctAnswer ?? "Audience response not recorded";
-    applyScore(false, current, answerText);
+    applyScore(false, current, answerText, "Timed out");
     revealTimeoutAnswer(answerText);
   }
 }
@@ -861,7 +977,7 @@ function revealTypedAnswer(current, rawInput, fromTimer = false) {
       input.classList.add("correct");
     }
     if (hb) hb.disabled = true;
-    applyScore(true, current, current.correctAnswer);
+    applyScore(true, current, current.correctAnswer, rawInput);
     return;
   }
 
@@ -872,7 +988,7 @@ function revealTypedAnswer(current, rawInput, fromTimer = false) {
       input.classList.add("wrong");
     }
     if (hb) hb.disabled = true;
-    applyScore(false, current, current.correctAnswer);
+    applyScore(false, current, current.correctAnswer, "Timed out");
     revealTimeoutAnswer(current.correctAnswer);
     return;
   }
@@ -890,8 +1006,9 @@ function revealTypedAnswer(current, rawInput, fromTimer = false) {
   setKeyboardHint("Wrong - try again (time still running) · H = hint");
 }
 
-function applyScore(isCorrect, current, correctSummary) {
+function applyScore(isCorrect, current, correctSummary, selectedSummary = "") {
   stopQuestionTimer();
+  void saveResponseToServer(current, isCorrect, correctSummary, selectedSummary);
   if (isCorrect) {
     score += 1;
     streak += 1;
@@ -937,7 +1054,10 @@ function revealPickOne(current, selectedIndex, clickedButton) {
   const ok = selectedIndex === shuffledCorrectIndex;
   if (!ok) clickedButton.classList.add("wrong");
   const correctLabel = current.options[current.answer];
-  applyScore(ok, current, correctLabel);
+  const pickedLabel = optionsEl
+    .querySelectorAll(".option-btn")
+    [selectedIndex]?.querySelector(".option-label")?.textContent;
+  applyScore(ok, current, correctLabel, pickedLabel ?? "");
 }
 
 function revealTrueFalse(current, pickedTrue) {
@@ -956,6 +1076,7 @@ function revealTrueFalse(current, pickedTrue) {
     ok,
     current,
     current.answer ? "True" : "False",
+    pickedTrue ? "True" : "False",
   );
 }
 
@@ -985,7 +1106,8 @@ function revealPickMany(current) {
   const correctLabels = current.correctIndices
     .map((i) => current.options[i])
     .join("; ");
-  applyScore(ok, current, `All of: ${correctLabels}`);
+  const pickedLabels = selected.map((i) => current.options[i]).join("; ");
+  applyScore(ok, current, `All of: ${correctLabels}`, pickedLabels);
 }
 
 function renderFillBlankPrompt(el, text) {
@@ -1174,14 +1296,14 @@ function renderQna(current) {
     if (answered) return;
     yesBtn.disabled = true;
     if (noBtn) noBtn.disabled = true;
-    applyScore(true, current, "Audience answered correctly");
+    applyScore(true, current, "Audience answered correctly", "Yes");
   });
 
   noBtn?.addEventListener("click", () => {
     if (answered) return;
     if (yesBtn) yesBtn.disabled = true;
     noBtn.disabled = true;
-    applyScore(false, current, "Audience answer was incorrect");
+    applyScore(false, current, "Audience answer was incorrect", "No");
     revealTimeoutAnswer(current.correctAnswer ?? "Audience answer was incorrect");
   });
 
@@ -1241,7 +1363,10 @@ function renderQuestion() {
     window.setTimeout(() => flashBanner(`Wave ${wave}`, "wave"), 280);
   }
 
-  startQuestionTimer(type === "qna" ? QNA_TIME_SEC : QUESTION_TIME_SEC);
+  questionStartedAtMs = Date.now();
+  const perQuestionTimer = Number.isFinite(current.timeSec) ? current.timeSec : null;
+  const fallbackTimer = type === "qna" ? QNA_TIME_SEC : QUESTION_TIME_SEC;
+  startQuestionTimer(perQuestionTimer ?? fallbackTimer);
 }
 
 function escapeHtml(text) {
@@ -1286,7 +1411,7 @@ function rankForPercent(percent) {
   };
 }
 
-function showResult() {
+async function showResult() {
   clearQnaRevealTimer();
   stopQuestionTimer();
   if (timerWrap) timerWrap.hidden = true;
@@ -1297,6 +1422,11 @@ function showResult() {
 
   const percent = Math.round((score / questions.length) * 100);
   const rank = rankForPercent(percent);
+  try {
+    await finishRunOnServer(percent);
+  } catch (error) {
+    console.error("Failed to save final score", error);
+  }
 
   rankTitle.textContent = rank.title;
   scoreText.textContent = `${score} / ${questions.length} cleared (${percent}%)`;
@@ -1326,8 +1456,24 @@ function showResult() {
   }
 }
 
-function beginQuiz() {
+async function beginQuiz() {
+  const name = String(playerNameInput?.value ?? "").trim();
+  if (!name) {
+    flashBanner("ENTER NAME FIRST", "bad");
+    if (playerNameInput) playerNameInput.focus();
+    return;
+  }
   resumeAudio();
+  activePlayerName = name;
+  try {
+    await loadQuestionsFromServer();
+    await loadTimerConfig();
+    await startRunOnServer(name);
+  } catch (error) {
+    console.error("Unable to start run on server", error);
+    flashBanner("SERVER ERROR", "bad");
+    return;
+  }
   intro.classList.add("hidden");
   gameHud.classList.remove("hidden");
   gameRoot.classList.add("is-playing");
@@ -1345,6 +1491,15 @@ function beginQuiz() {
 
 startBtn.addEventListener("click", beginQuiz);
 
+void (async () => {
+  try {
+    await loadQuestionsFromServer();
+    await loadTimerConfig();
+  } catch (error) {
+    console.warn("Using local defaults for question bank/config", error);
+  }
+})();
+
 nextBtn.addEventListener("click", () => {
   const current = questions[index];
   if (!answered) {
@@ -1360,14 +1515,25 @@ nextBtn.addEventListener("click", () => {
   if (index < questions.length) {
     renderQuestion();
   } else {
-    showResult();
+    void showResult();
   }
 });
 
-restartBtn.addEventListener("click", () => {
+restartBtn.addEventListener("click", async () => {
   resumeAudio();
   clearQnaRevealTimer();
   stopQuestionTimer();
+  if (activePlayerName) {
+    try {
+      await loadQuestionsFromServer();
+      await loadTimerConfig();
+      await startRunOnServer(activePlayerName);
+    } catch (error) {
+      console.error("Unable to restart run on server", error);
+      flashBanner("SERVER ERROR", "bad");
+      return;
+    }
+  }
   questions = buildRound();
   index = 0;
   score = 0;
