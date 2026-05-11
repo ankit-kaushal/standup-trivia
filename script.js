@@ -1456,6 +1456,11 @@ async function showResult() {
   }
 }
 
+function btnLoading(btn, on) {
+  if (on) btn.classList.add("loading");
+  else btn.classList.remove("loading");
+}
+
 async function beginQuiz() {
   const name = String(playerNameInput?.value ?? "").trim();
   if (!name) {
@@ -1465,6 +1470,7 @@ async function beginQuiz() {
   }
   resumeAudio();
   activePlayerName = name;
+  btnLoading(startBtn, true);
   try {
     await loadQuestionsFromServer();
     await loadTimerConfig();
@@ -1472,8 +1478,10 @@ async function beginQuiz() {
   } catch (error) {
     console.error("Unable to start run on server", error);
     flashBanner("SERVER ERROR", "bad");
+    btnLoading(startBtn, false);
     return;
   }
+  btnLoading(startBtn, false);
   intro.classList.add("hidden");
   gameHud.classList.remove("hidden");
   gameRoot.classList.add("is-playing");
@@ -1524,6 +1532,7 @@ restartBtn.addEventListener("click", async () => {
   clearQnaRevealTimer();
   stopQuestionTimer();
   if (activePlayerName) {
+    btnLoading(restartBtn, true);
     try {
       await loadQuestionsFromServer();
       await loadTimerConfig();
@@ -1531,8 +1540,10 @@ restartBtn.addEventListener("click", async () => {
     } catch (error) {
       console.error("Unable to restart run on server", error);
       flashBanner("SERVER ERROR", "bad");
+      btnLoading(restartBtn, false);
       return;
     }
+    btnLoading(restartBtn, false);
   }
   questions = buildRound();
   index = 0;

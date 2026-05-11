@@ -614,6 +614,30 @@ h1 {
   font-size: 1.05rem;
 }
 
+.btn-arcade.loading {
+  pointer-events: none;
+  opacity: 0.72;
+  position: relative;
+}
+.btn-arcade.loading .btn-label {
+  visibility: hidden;
+}
+.btn-arcade.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(4, 18, 8, 0.3);
+  border-top-color: #041208;
+  border-radius: 50%;
+  animation: btn-spin 0.55s linear infinite;
+}
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
 .quiz-top {
   display: flex;
   flex-wrap: wrap;
