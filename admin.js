@@ -75,6 +75,30 @@ function setMsg(text, isError = false, login = false) {
   node.style.color = isError ? "#ff6b6b" : "#7dffce";
 }
 
+function btnLoading(btn, on) {
+  if (on) btn.classList.add("loading");
+  else btn.classList.remove("loading");
+}
+
+async function withLoading(btn, fn) {
+  btnLoading(btn, true);
+  try { return await fn(); }
+  finally { btnLoading(btn, false); }
+}
+
+function skeletonKpis() {
+  el.statsKpis.innerHTML = Array(4).fill('<div class="kpi skeleton skel-kpi"></div>').join("");
+}
+
+function skeletonTable(tbody, cols, rows = 5) {
+  tbody.innerHTML = Array(rows).fill(0).map(() =>
+    `<tr>${Array(cols).fill(0).map(() => '<td><div class="skeleton skel-row" style="height:18px;width:80%"></div></td>').join("")}</tr>`
+  ).join("");
+}
+
+function skeletonScores() { skeletonTable(el.scoresBody, 6); }
+function skeletonResponses() { skeletonTable(el.responsesBody, 7); }
+
 function saveAuthCache() {
   localStorage.setItem(
     ADMIN_AUTH_CACHE_KEY,
@@ -209,7 +233,9 @@ function resetQuestionForm() {
   el.qAnswer.value = "";
   el.qPrompt.value = "";
   el.qScrambled.value = "";
-  el.saveQuestion.textContent = "Add Question";
+  const saveLabel = el.saveQuestion.querySelector(".btn-label");
+  if (saveLabel) saveLabel.textContent = "Add Question";
+  else el.saveQuestion.textContent = "Add Question";
   el.cancelEdit.classList.add("hidden");
   updateQuestionFieldVisibility();
 }
@@ -235,7 +261,9 @@ function setFormFromQuestion(q) {
     state.options = [{ text: "", correct: true }, { text: "", correct: false }];
   }
 
-  el.saveQuestion.textContent = "Update Question";
+  const saveLabel = el.saveQuestion.querySelector(".btn-label");
+  if (saveLabel) saveLabel.textContent = "Update Question";
+  else el.saveQuestion.textContent = "Update Question";
   el.cancelEdit.classList.remove("hidden");
   updateQuestionFieldVisibility();
 }
@@ -390,25 +418,33 @@ async function login() {
     if (!password) markError(el.password);
     return setMsg("Enter username and password.", true, true);
   }
-  try {
-    const res = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    if (!res.ok) throw new Error("Invalid credentials.");
-    state.auth = { username, password };
-    saveAuthCache();
-    el.authShell.classList.add("hidden");
-    el.dashboardShell.classList.remove("hidden");
-    await Promise.all([loadStats(), loadScores(), loadQuestions(), initPlayerDropdown()]);
-    applyPendingEditFromUrl();
-    if (window.feather) window.feather.replace();
-    setMsg("Dashboard ready.");
-  } catch (error) {
-    clearAuthCache();
-    setMsg(error.message, true, true);
-  }
+  await withLoading(el.loginBtn, async () => {
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!res.ok) throw new Error("Invalid credentials.");
+      state.auth = { username, password };
+      saveAuthCache();
+      el.authShell.classList.add("hidden");
+      el.dashboardShell.classList.remove("hidden");
+      showDashboardSkeletons();
+      await Promise.all([loadStats(), loadScores(), loadQuestions(), initPlayerDropdown()]);
+      applyPendingEditFromUrl();
+      if (window.feather) window.feather.replace();
+      setMsg("Dashboard ready.");
+    } catch (error) {
+      clearAuthCache();
+      setMsg(error.message, true, true);
+    }
+  });
+}
+
+function showDashboardSkeletons() {
+  skeletonKpis();
+  skeletonScores();
 }
 
 async function tryAutoLoginFromCache() {
@@ -425,10 +461,12 @@ async function tryAutoLoginFromCache() {
     el.username.value = data.username;
     el.password.value = data.password;
 
-    await Promise.all([loadStats(), loadScores(), loadQuestions(), initPlayerDropdown()]);
-    saveAuthCache();
     el.authShell.classList.add("hidden");
     el.dashboardShell.classList.remove("hidden");
+    showDashboardSkeletons();
+
+    await Promise.all([loadStats(), loadScores(), loadQuestions(), initPlayerDropdown()]);
+    saveAuthCache();
     applyPendingEditFromUrl();
     if (window.feather) window.feather.replace();
     setMsg("Restored previous login.");
@@ -436,6 +474,8 @@ async function tryAutoLoginFromCache() {
     if (String(error?.message || "").toLowerCase().includes("unauthorized")) {
       clearAuthCache();
     }
+    el.authShell.classList.remove("hidden");
+    el.dashboardShell.classList.add("hidden");
     setMsg("Saved login could not be restored. Please login again.", true, true);
   }
 }
@@ -496,6 +536,7 @@ el.tabs.forEach((btn) => {
     setActiveTab(tab);
     if (tab === "responses") {
       try {
+        skeletonResponses();
         await loadResponses();
       } catch (error) {
         setMsg(error.message, true);
@@ -505,21 +546,28 @@ el.tabs.forEach((btn) => {
 });
 
 el.refreshScores.addEventListener("click", async () => {
-  try {
-    await Promise.all([loadStats(), loadScores()]);
-    setMsg("Stats refreshed.");
-  } catch (error) {
-    setMsg(error.message, true);
-  }
+  await withLoading(el.refreshScores, async () => {
+    try {
+      skeletonKpis();
+      skeletonScores();
+      await Promise.all([loadStats(), loadScores()]);
+      setMsg("Stats refreshed.");
+    } catch (error) {
+      setMsg(error.message, true);
+    }
+  });
 });
 
 el.refreshResponses.addEventListener("click", async () => {
-  try {
-    await loadResponses();
-    setMsg("Responses refreshed.");
-  } catch (error) {
-    setMsg(error.message, true);
-  }
+  await withLoading(el.refreshResponses, async () => {
+    try {
+      skeletonResponses();
+      await loadResponses();
+      setMsg("Responses refreshed.");
+    } catch (error) {
+      setMsg(error.message, true);
+    }
+  });
 });
 
 el.saveConfig.addEventListener("click", async () => {
@@ -530,26 +578,31 @@ el.saveConfig.addEventListener("click", async () => {
     return setMsg("Question timer is required.", true);
   }
 
-  try {
-    await adminFetch("/api/admin/config", {
-      method: "POST",
-      body: JSON.stringify({ questionTimeSec }),
-    });
-    setMsg("Question timer saved.");
-  } catch (error) {
-    setMsg(error.message, true);
-  }
+  await withLoading(el.saveConfig, async () => {
+    try {
+      await adminFetch("/api/admin/config", {
+        method: "POST",
+        body: JSON.stringify({ questionTimeSec }),
+      });
+      setMsg("Question timer saved.");
+    } catch (error) {
+      setMsg(error.message, true);
+    }
+  });
 });
 
 el.clearResponses.addEventListener("click", async () => {
   if (!window.confirm("Clear all responses?")) return;
-  try {
-    await adminFetch("/api/admin/responses/clear", { method: "POST" });
-    await Promise.all([loadResponses(), loadStats()]);
-    setMsg("All responses cleared.");
-  } catch (error) {
-    setMsg(error.message, true);
-  }
+  await withLoading(el.clearResponses, async () => {
+    try {
+      await adminFetch("/api/admin/responses/clear", { method: "POST" });
+      skeletonResponses();
+      await Promise.all([loadResponses(), loadStats()]);
+      setMsg("All responses cleared.");
+    } catch (error) {
+      setMsg(error.message, true);
+    }
+  });
 });
 
 el.addOption.addEventListener("click", () => {
@@ -590,26 +643,30 @@ el.optionArray.addEventListener("click", (event) => {
 });
 
 el.saveQuestion.addEventListener("click", async () => {
-  try {
-    const payload = readQuestionPayload();
-    if (state.editingQuestionId) {
-      await adminFetch(`/api/admin/questions/${state.editingQuestionId}`, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      });
-      setMsg("Question updated.");
-    } else {
-      await adminFetch("/api/admin/questions", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      setMsg("Question added.");
+  let payload;
+  try { payload = readQuestionPayload(); } catch (error) { return setMsg(error.message, true); }
+
+  await withLoading(el.saveQuestion, async () => {
+    try {
+      if (state.editingQuestionId) {
+        await adminFetch(`/api/admin/questions/${state.editingQuestionId}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        setMsg("Question updated.");
+      } else {
+        await adminFetch("/api/admin/questions", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        setMsg("Question added.");
+      }
+      resetQuestionForm();
+      await Promise.all([loadQuestions(), loadStats()]);
+    } catch (error) {
+      setMsg(error.message, true);
     }
-    resetQuestionForm();
-    await Promise.all([loadQuestions(), loadStats()]);
-  } catch (error) {
-    setMsg(error.message, true);
-  }
+  });
 });
 
 el.cancelEdit.addEventListener("click", resetQuestionForm);

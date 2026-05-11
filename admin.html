@@ -62,6 +62,25 @@
       .opt-input { border: 1px solid var(--border); border-radius: 8px; background: #05070f; color: var(--text); padding: 9px 10px; font: 600 .88rem var(--font); width: 100%; flex: 1; min-width: 0; }
       .icon-btn { border: 1px solid var(--border); background: #0b0b18; color: var(--text); border-radius: 8px; padding: 5px 7px; display: inline-flex; cursor: pointer; }
       .icon-btn:hover { border-color: var(--neon); }
+      /* --- Button spinner --- */
+      .btn-mini.loading, .refresh-btn.loading { pointer-events: none; opacity: .65; position: relative; }
+      .btn-mini.loading .btn-label { visibility: hidden; }
+      .btn-mini.loading::after, .refresh-btn.loading::after {
+        content: ""; position: absolute; inset: 0; margin: auto;
+        width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.25);
+        border-top-color: var(--neon); border-radius: 50%;
+        animation: spin .55s linear infinite;
+      }
+      .refresh-btn.loading svg { visibility: hidden; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* --- Skeleton pulse --- */
+      .skeleton { background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.08) 50%, rgba(255,255,255,.04) 75%); background-size: 200% 100%; animation: shimmer 1.4s ease infinite; border-radius: 8px; }
+      @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+      .skel-kpi { height: 68px; border-radius: 12px; }
+      .skel-row { height: 40px; margin-bottom: 6px; border-radius: 8px; }
+      .skel-row:last-child { width: 60%; }
+
       @keyframes admin-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
     </style>
@@ -80,7 +99,7 @@
             <div><label class="label" for="admin-username">Username <span class="req">*</span></label><input id="admin-username" class="field" type="text" autocomplete="username" /></div>
             <div><label class="label" for="admin-password">Password <span class="req">*</span></label><input id="admin-password" class="field" type="password" autocomplete="current-password" /></div>
           </div>
-          <div class="toolbar"><button id="login-btn" class="btn-mini" type="button">Enter Console</button><a href="/" class="btn-mini" style="text-decoration:none;display:inline-flex;align-items:center;">Back to game</a></div>
+          <div class="toolbar"><button id="login-btn" class="btn-mini" type="button"><span class="btn-label">Enter Console</span></button><a href="/" class="btn-mini" style="text-decoration:none;display:inline-flex;align-items:center;">Back to game</a></div>
           <p id="login-msg" class="msg"></p>
         </section>
 
@@ -94,7 +113,7 @@
               <div><label class="label" for="question-time">Default Question Time (sec) <span class="req">*</span></label><input id="question-time" class="field" type="number" min="5" max="300" /></div>
               <div><label class="label" for="score-sort">Sort Scores</label><div class="custom-dd"><button id="score-sort-trigger" class="dd-trigger" type="button">Latest</button><div id="score-sort-menu" class="dd-menu hidden"></div></div></div>
             </div>
-            <div class="toolbar"><button id="save-config" class="btn-mini" type="button">Save Question Timer</button></div>
+            <div class="toolbar"><button id="save-config" class="btn-mini" type="button"><span class="btn-label">Save Question Timer</span></button></div>
             <div class="table-wrap"><table><thead><tr><th>Name</th><th>Score</th><th>Percent</th><th>Best Streak</th><th>XP</th><th>Ended</th></tr></thead><tbody id="scores-body"></tbody></table></div>
           </section>
 
@@ -102,7 +121,7 @@
             <div class="panel-head"><h2>Response Log</h2><button id="refresh-responses" class="refresh-btn" type="button" title="Refresh responses"><i data-feather="refresh-cw"></i></button></div>
             <div class="grid2 section">
               <div><label class="label" for="player-filter-trigger">Player Filter</label><div class="custom-dd"><button id="player-filter-trigger" class="dd-trigger" type="button">All Players</button><div id="player-filter-menu" class="dd-menu hidden"></div></div></div>
-              <div class="toolbar" style="align-items:end;"><button id="clear-responses" class="btn-mini danger" type="button">Clear Responses</button></div>
+              <div class="toolbar" style="align-items:end;"><button id="clear-responses" class="btn-mini danger" type="button"><span class="btn-label">Clear Responses</span></button></div>
             </div>
             <div class="table-wrap"><table><thead><tr><th>Player</th><th>Q#</th><th>Question</th><th>Selected</th><th>Correct</th><th>Result</th><th>Time</th></tr></thead><tbody id="responses-body"></tbody></table></div>
           </section>
@@ -120,12 +139,12 @@
             <div id="group-scramble" class="grid2 section"><div><label class="label" for="q-prompt">Prompt (Word Scramble)</label><input id="q-prompt" class="field" type="text" /></div><div><label class="label" for="q-scrambled">Scrambled</label><input id="q-scrambled" class="field" type="text" /></div></div>
             <div class="split-actions">
               <div class="split-left">
-                <button id="add-option" class="btn-mini hidden" type="button">Add Option</button>
-                <button id="show-all-questions" class="btn-mini" type="button">Show All Questions</button>
-                <button id="cancel-edit" class="btn-mini hidden" type="button">Cancel Edit</button>
+                <button id="add-option" class="btn-mini hidden" type="button"><span class="btn-label">Add Option</span></button>
+                <button id="show-all-questions" class="btn-mini" type="button"><span class="btn-label">Show All Questions</span></button>
+                <button id="cancel-edit" class="btn-mini hidden" type="button"><span class="btn-label">Cancel Edit</span></button>
               </div>
               <div class="split-right">
-                <button id="save-question" class="btn-mini" type="button">Add Question</button>
+                <button id="save-question" class="btn-mini" type="button"><span class="btn-label">Add Question</span></button>
               </div>
             </div>
           </section>

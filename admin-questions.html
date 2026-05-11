@@ -31,6 +31,15 @@
       .icon-btn:hover { border-color: var(--neon); }
       .icon-btn.danger { border-color: color-mix(in oklab, var(--danger) 60%, var(--border)); }
       .msg { margin-top: 10px; min-height: 18px; font-weight: 700; }
+
+      /* spinner + skeleton */
+      .btn.loading { pointer-events: none; opacity: .65; position: relative; }
+      .btn.loading .btn-label { visibility: hidden; }
+      .btn.loading::after { content: ""; position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.25); border-top-color: var(--neon); border-radius: 50%; animation: spin .55s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .skeleton { background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.08) 50%, rgba(255,255,255,.04) 75%); background-size: 200% 100%; animation: shimmer 1.4s ease infinite; border-radius: 8px; }
+      @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+      .skel-q { height: 80px; border-radius: 11px; }
     </style>
   </head>
   <body>
@@ -43,7 +52,7 @@
           <div class="head">
             <h1 class="title">All Questions</h1>
             <div class="toolbar">
-              <button id="refresh" class="btn" type="button">Refresh</button>
+              <button id="refresh" class="btn" type="button"><span class="btn-label">Refresh</span></button>
               <a href="/admin?tab=questions" class="btn">Back</a>
             </div>
           </div>

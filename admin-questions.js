@@ -3,6 +3,13 @@ const msg = document.getElementById("msg");
 const list = document.getElementById("q-list");
 const refreshBtn = document.getElementById("refresh");
 
+function btnLoading(btn, on) { btn.classList.toggle("loading", on); }
+async function withLoading(btn, fn) { btnLoading(btn, true); try { return await fn(); } finally { btnLoading(btn, false); } }
+
+function showSkeletonQuestions() {
+  list.innerHTML = Array(4).fill('<div class="q-item skeleton skel-q"></div>').join("");
+}
+
 function setMsg(text, isError = false) {
   msg.textContent = text;
   msg.style.color = isError ? "#ff6b6b" : "#7dffce";
@@ -73,6 +80,7 @@ function renderQuestions(rows) {
 }
 
 async function loadQuestions() {
+  showSkeletonQuestions();
   try {
     const data = await authFetch("/api/admin/questions");
     renderQuestions(data.rows || []);
@@ -82,7 +90,7 @@ async function loadQuestions() {
   }
 }
 
-refreshBtn.addEventListener("click", loadQuestions);
+refreshBtn.addEventListener("click", () => withLoading(refreshBtn, loadQuestions));
 list.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
