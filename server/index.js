@@ -29,14 +29,23 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ message: "Server error", error: err.message });
 });
 
-async function start() {
-  await connectDb();
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+let dbConnected = false;
+async function ensureDb() {
+  if (!dbConnected) {
+    await connectDb();
+    dbConnected = true;
+  }
+}
+
+if (require.main === module) {
+  ensureDb().then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }).catch((err) => {
+    console.error("Failed to start server:", err);
+    process.exit(1);
   });
 }
 
-start().catch((err) => {
-  console.error("Failed to start server:", err);
-  process.exit(1);
-});
+module.exports = { app, ensureDb };
